@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from src.Differential2D import Drx2bm,Drz2fm,Drx2fm,Drz2bm
 from src.BaseFun import Ricker,Ricker2
-pi=np.pi
+pi=ti.math.pi
 
 @ti.data_oriented
 class ElasticWAVE:

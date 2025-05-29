@@ -41,9 +41,9 @@ rsz.from_numpy(rsz_np)
 isx=int(61)  # 震源位置
 isy=int(61)
 isz=int(101)
-dt=0.0003
+dt=0.0001
 pi=np.pi
-freq=60
+freq=30
 src_scale=1
 # Moment tensor source implementation
 MT=ti.field(dtype=ti.f32,shape=((3,3)))

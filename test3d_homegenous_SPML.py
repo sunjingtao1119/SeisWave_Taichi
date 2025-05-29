@@ -1,13 +1,14 @@
+# split pefectly matched layer (SPML) for 3D elastic wave equation
 import taichi as ti 
 import numpy as np
 import matplotlib.pyplot as plt
-from src.Elastic3D_SSG_SPML import ElasticWAVE
+from src.Elastic3D_SSG_SPML import ElasticWAVE  
 import time
-ti.init(arch=ti.gpu)
+ti.init(arch=ti.gpu)    # or ti.cpu, ti.cuda, ti.vulkan, ti.metal, ti.opengl
+# Set the parameters
 nx=171
 ny=171
 nz=171
-# load model
 vp =ti.field(dtype=ti.f32,shape=(nx,ny,nz))
 vp.fill(2500.)
 vs =ti.field(dtype=ti.f32,shape=(nx,ny,nz))
@@ -40,8 +41,7 @@ if Courant_number > 1 :
     exit()
 # Initialize the wave field
 test=ElasticWAVE(vs,vp,rho,dx,dy,dz,dt,isx,isy,isz,rsx,rsy,rsz,nt,accuracy,freq,src_scale)
-#################### The PML boundary####################  
-                
+#################### The PML boundary####################               
 NPoint_Pml = 15                      # The number of grid points in PML layer
 pml_x_thick=NPoint_Pml *dx;          # The thickness of PML layer in x direction
 pml_y_thick=NPoint_Pml *dy;  

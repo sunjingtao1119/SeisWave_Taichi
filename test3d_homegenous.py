@@ -26,10 +26,10 @@ isz=int(nz/2)
 rsx=int(nx/2+20)
 rsy=int(ny/2+20)
 rsz=int(nz/2+20)
-dt=0.5e-4
+dt=1e-4
 accuracy=5       #  3 denotes 6th-order staggered-grid
 pi=np.pi
-freq=60
+freq=30
 src_scale=1000
 # Stability analysis
 Courant_number = vp_max * dt * np.sqrt(1/dx**2 + 1/dy**2+1/dz**2)

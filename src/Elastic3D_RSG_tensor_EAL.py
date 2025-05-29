@@ -1,7 +1,7 @@
 import taichi as ti
 import numpy as np
-from src.Differential3D import Dx3bm,Dx3fm,Dy3bm,Dy3fm,Dz3bm,Dz3fm
-from src.BaseFun import Ricker
+from src.Differential3D_old import Drd1bm,Drd2bm,Drd3bm,Drd4bm,Drd1fm,Drd2fm,Drd3fm,Drd4fm
+from src.BaseFun import Ricker,Ricker2
 pi=np.pi
 
 @ti.data_oriented
@@ -19,7 +19,9 @@ class ElasticWAVE:
                  isz:int,
                  rsx:int,
                  rsy:int,
-                 rsz:int,  
+                 rsz:int,
+                 MT:ti.field,  
+                 src_scale:float,  
                  nt:int,               
                  accuracy:int,
                  freq=100,
@@ -32,14 +34,25 @@ class ElasticWAVE:
         self.dx=dx
         self.dy=dy
         self.dz=dz
-        self.xmin=0
-        self.ymin=0
-        self.zmin=0
+        self.dl=ti.sqrt(dx**2+dy**2+dz**2)
+        self.xmin=0*dx
+        self.ymin=0*dy
+        self.zmin=0*dz
         self.star=accuracy
         self.c=self.diff_coff(accuracy)
-        self.xmax=self.xmin+dx*(self.gridsize[0]-1-2*accuracy)    # Calculate the maximum x-coordinate based on grid size and spacing
-        self.ymax=self.zmin+dy*(self.gridsize[1]-1-2*accuracy)    # Calculate the maximum z-coordinate based on grid size and spacing
-        self.zmax=self.zmin+dz*(self.gridsize[2]-1-2*accuracy)
+        self.xmax=dx*(self.gridsize[0]-1-2*accuracy)-self.xmin    # Calculate the maximum x-coordinate based on grid size and spacing
+        self.ymax=dy*(self.gridsize[1]-1-2*accuracy)-self.ymin    # Calculate the maximum z-coordinate based on grid size and spacing
+        self.zmax=dz*(self.gridsize[2]-1-2*accuracy)-self.zmin    # Calculate the maximum z-coordinate based on grid size and spacing
+        self.xmin_EAL=10*dx
+        self.ymin_EAL=10*dy
+        self.zmin_EAL=10*dz
+        self.star=accuracy
+        self.c=self.diff_coff(accuracy)
+        self.xmax_EAL=dx*(self.gridsize[0]-1-2*accuracy)-self.xmin_EAL    # Calculate the maximum x-coordinate based on grid size and spacing
+        self.ymax_EAL=dy*(self.gridsize[1]-1-2*accuracy)-self.ymin_EAL    # Calculate the maximum z-coordinate based on grid size and spacing
+        self.zmax_EAL=dz*(self.gridsize[2]-1-2*accuracy)-self.zmin_EAL    # Calculate the maximum z-coordinate based on grid size and spacing
+
+
         self.mu=self.Compute_mu(fieldtype)
         self.lam=self.Compute_lam(fieldtype)
         # source term
@@ -51,7 +64,19 @@ class ElasticWAVE:
         self.rsx=rsx
         self.rsy=rsy
         self.rsz=rsz
-        self.data=ti.field(dtype=ti.f32,shape=nt)
+        self.src_scale=src_scale
+        self.MT=MT
+        index=ti.field(dtype=int,shape=(3))
+        index[0]=-2
+        index[1]=0
+        index[2]=2
+        self.xindex=index
+        self.yindex=index
+        self.zindex=index
+        datasize=rsx.shape[1]
+        self.datasize=datasize
+        self.data=ti.field(dtype=ti.f32,shape=(nt,datasize))
+        self.src=ti.field(dtype=ti.f32,shape=(nt))
         # velocity field and stress field initial 
         self.vx =ti.field(dtype=fieldtype,shape=self.gridsize)
         self.vy =ti.field(dtype=fieldtype,shape=self.gridsize)
@@ -129,7 +154,6 @@ class ElasticWAVE:
         mu=ti.field(dtype=fieldtype,shape=size)
         mu.from_numpy(mu_np)
         return mu
-
     def Compute_lam(self,fieldtype):
         size=self.vs.shape
         vs_np=self.vs.to_numpy()
@@ -139,15 +163,13 @@ class ElasticWAVE:
         lam=ti.field(dtype=fieldtype,shape=size)
         lam.from_numpy(lam_np)
         return lam
-
-
     @ti.kernel
-    def update_SSG(self,nt:int):
+    def update_RSG(self,nt:int):
         star=self.star
-        dx=self.dx
-        dy=self.dy
-        dz=self.dz
-        dt=self.dt
+        dx =self.dx
+        dy =self.dy
+        dz =self.dz
+        dt =self.dt
         isz=self.isz
         isy=self.isy
         isx=self.isx
@@ -160,58 +182,111 @@ class ElasticWAVE:
         nx=self.gridsize[0]
         ny=self.gridsize[1]
         nz=self.gridsize[2]
-        # update vx
+        # update vx vy vz
         for i,j,k in ti.ndrange((star,nx-star-1),(star+1,ny-star),(star+1,nz-star)):
-            x=(i-star)*dx+dx/2
-            y=(j-star)*dy
-            z=(k-star)*dz
-            dsxx =Dx3fm(self.sxx,i,j,k,self.c,star)/dx
-            dsxyy=Dy3bm(self.sxy,i,j,k,self.c,star)/dy
-            dsxzz=Dz3bm(self.sxz,i,j,k,self.c,star)/dz
-            if (x<=xmin_pml or x>=xmax_pml or y<=ymin_pml or y>=ymax_pml or z<=zmin_pml or z>=zmax_pml):
-                self.memory_sxx_dx[i,j,k] = self.b_x_half[i] * self.memory_sxx_dx[i,j,k] + self.a_x_half[i] * dsxx
-                self.memory_sxy_dy[i,j,k] = self.b_y[j] * self.memory_sxy_dy[i,j,k] + self.a_y[j] * dsxyy
-                self.memory_sxz_dz[i,j,k] = self.b_z[k] * self.memory_sxz_dz[i,j,k] + self.a_z[k] * dsxzz
-                dsxx  = dsxx /self.k_x_half[i] + self.memory_sxx_dx[i,j,k]
-                dsxyy = dsxyy/self.k_y[j] + self.memory_sxy_dy[i,j,k]
-                dsxzz = dsxzz/self.k_z[k] + self.memory_sxz_dz[i,j,k]
-            self.vx[i,j,k]+=(dsxx+dsxzz+dsxyy)*dt/self.rho[i,j,k]      
-        # update vy
-        for i, j, k in ti.ndrange((star+1,nx-star ),(star,ny-star-1),(star+1,nz-star)):
-            x = (i-star)*dx
-            y = (j-star)*dy+dy/2
-            z = (k-star)*dz
-            rho_half_y=0.5*(self.rho[i,j,k]+self.rho[i,j+1,k])
-            dsxy = Dx3bm(self.sxy,i,j,k,self.c,star)/dx
-            dsyy = Dy3fm(self.syy,i,j,k,self.c,star)/dy
-            dsyz = Dz3bm(self.syz,i,j,k,self.c,star)/dz
-            if (x <= xmin_pml or x >= xmax_pml or y <= ymin_pml or y >= ymax_pml or z <= zmin_pml or z >= zmax_pml):
-                self.memory_sxy_dx[i,j,k] = self.b_x[i] * self.memory_sxy_dx[i,j,k] + self.a_x[i] * dsxy
-                self.memory_syy_dy[i,j,k] = self.b_y_half[j] * self.memory_syy_dy[i,j,k] + self.a_y_half[j] * dsyy
-                self.memory_syz_dz[i,j,k] = self.b_z[k] * self.memory_syz_dz[i,j,k] + self.a_z[k] * dsyz
-                dsxy = dsxy/self.k_x[i] + self.memory_sxy_dx[i,j,k]
-                dsyy = dsyy/self.k_y_half[j] + self.memory_syy_dy[i,j,k]
-                dsyz = dsyz/self.k_z[k] + self.memory_syz_dz[i, j, k]
-            self.vy[i,j,k]+=(dsxy+dsyy+dsyz)*dt/rho_half_y
-        #update vz
-        for i,j,k in ti.ndrange((star+1,nx-star),(star+1,ny-star),(star,nz-star-1)):
             x=(i-star)*dx
             y=(j-star)*dy
-            z=(k-star)*dz+dz/2  
-            rho_half_x_half_z=0.25*(self.rho[i,j,k]+self.rho[i,j+1,k]+self.rho[i+1,j+1,k]+self.rho[i+1,j,k])
-            dsxzx=Dx3bm(self.sxz,i,j,k,self.c,star)/dx
-            dsyzy=Dy3bm(self.syz,i,j,k,self.c,star)/dy
-            dszz =Dz3fm(self.szz,i,j,k,self.c,star)/dz
+            z=(k-star)*dz
+ 
+            dsxxd1=Drd1bm(self.sxx,i,j,k,self.c,star)
+            dsxxd2=Drd2bm(self.sxx,i,j,k,self.c,star)
+            dsxxd3=Drd3bm(self.sxx,i,j,k,self.c,star)
+            dsxxd4=Drd4bm(self.sxx,i,j,k,self.c,star)
+
+            dsxyd1=Drd1bm(self.sxy,i,j,k,self.c,star)
+            dsxyd2=Drd2bm(self.sxy,i,j,k,self.c,star)
+            dsxyd3=Drd3bm(self.sxy,i,j,k,self.c,star)
+            dsxyd4=Drd4bm(self.sxy,i,j,k,self.c,star)
+
+            dsyyd1=Drd1bm(self.syy,i,j,k,self.c,star)
+            dsyyd2=Drd2bm(self.syy,i,j,k,self.c,star)
+            dsyyd3=Drd3bm(self.syy,i,j,k,self.c,star)
+            dsyyd4=Drd4bm(self.syy,i,j,k,self.c,star)
+
+            dsxzd1=Drd1bm(self.sxz,i,j,k,self.c,star)
+            dsxzd2=Drd2bm(self.sxz,i,j,k,self.c,star)
+            dsxzd3=Drd3bm(self.sxz,i,j,k,self.c,star)
+            dsxzd4=Drd4bm(self.sxz,i,j,k,self.c,star)
+
+            dsyzd1=Drd1bm(self.syz,i,j,k,self.c,star)
+            dsyzd2=Drd2bm(self.syz,i,j,k,self.c,star)
+            dsyzd3=Drd3bm(self.syz,i,j,k,self.c,star)
+            dsyzd4=Drd4bm(self.syz,i,j,k,self.c,star)            
+
+            dszzd1=Drd1bm(self.szz,i,j,k,self.c,star)
+            dszzd2=Drd2bm(self.szz,i,j,k,self.c,star)
+            dszzd3=Drd3bm(self.szz,i,j,k,self.c,star)
+            dszzd4=Drd4bm(self.szz,i,j,k,self.c,star)
+
+            dsxxdx =(dsxxd1+dsxxd2+dsxxd3+dsxxd4)/(4*dx)
+            dsxydy =(dsxyd1+dsxyd2-dsxyd3-dsxyd4)/(4*dy)
+            dsxzdz =(dsxzd1-dsxzd2+dsxzd3-dsxzd4)/(4*dz)
+            
+            dsxydx =(dsxyd1+dsxyd2+dsxyd3+dsxyd4)/(4*dx)
+            dsyydy =(dsyyd1+dsyyd2-dsyyd3-dsyyd4)/(4*dy)
+            dsyzdz =(dsyzd1-dsyzd2+dsyzd3-dsyzd4)/(4*dz)
+            
+            dsxzdx =(dsxzd1+dsxzd2+dsxzd3+dsxzd4)/(4*dx)
+            dsyzdy =(dsyzd1+dsyzd2-dsyzd3-dsyzd4)/(4*dy)
+            dszzdz =(dszzd1-dszzd2+dszzd3-dszzd4)/(4*dz)
+            source=Ricker2(nt,dt,0.03,self.f0,self.src_scale)
+            
+            for i,j,k in ti.ndrange((0,2),(0,2),(0,2)):  
+                self.sxx[isx+i,isy+j,isz+k]+=source*(-self.MT[0,0])/8
+                self.syy[isx+i,isy+j,isz+k]+=source*(-self.MT[1,1])/8
+                self.szz[isx+i,isy+j,isz+k]+=source*(-self.MT[2,2])/8
+
+                self.sxy[isx+i,isy+j,isz+k]+=source*(-self.MT[0,1])/8
+                self.sxz[isx+i,isy+j,isz+k]+=source*(-self.MT[0,2])/8
+                self.syz[isx+i,isy+j,isz+k]+=source*(-self.MT[1,2])/8
+
+            rho=(self.rho[i,j,k]+self.rho[i+1,j,k]+self.rho[i+1,j+1,k]+self.rho[i,j+1,k]
+                  +self.rho[i,j,k+1]+self.rho[i+1,j,k+1]+self.rho[i+1,j+1,k+1]+self.rho[i,j+1,k+1])/8          
+
             if (x<=xmin_pml or x>=xmax_pml or y<=ymin_pml or y>=ymax_pml or z<=zmin_pml or z>=zmax_pml):
-                self.memory_sxz_dx[i,j,k] = self.b_x[i] * self.memory_sxz_dx[i,j,k] + self.a_x[i] * dsxzx
-                self.memory_syz_dy[i,j,k] = self.b_y[j] * self.memory_syz_dy[i,j,k] + self.a_y[j] * dsyzy
-                self.memory_szz_dz[i,j,k] =self. b_z_half[k] * self.memory_szz_dz[i,j,k] + self.a_z_half[k] * dszz
-                dsxzx = dsxzx /self.k_x[i] + self.memory_sxz_dx[i,j,k]
-                dsyzy = dsyzy /self.k_y[j] + self.memory_syz_dy[i,j,k]
-                dszz  = dszz  /self.k_z_half[k] + self.memory_szz_dz[i,j,k]
-            self.vz[i,j,k]+=(dszz+dsxzx+dsyzy)*dt/rho_half_x_half_z
+
+                if(x<=self.xmin_EAL or x>=self.xmax_EAL or y<=self.ymin_EAL or y>=self.ymax_EAL or z<=self.zmin_EAL or z>=self.zmax_EAL):
+                    damp=ti.sqrt(self.pml_x[i]**2+self.pml_y[j]**2+self.pml_z[k]**2)
+                    kamp=ti.sqrt((self.k_x[i]-1)**2+(self.k_y[j]-1)**2+(self.k_z[k]-1)**2)+1
+                    pmln=(kamp-0.5*dt*damp)              
+                    pmld=(kamp+0.5*dt*damp)   
+                    self.vx[i,j,k]=(pmln*self.vx[i,j,k]+(dsxxdx+dsxydy+dsxzdz)*dt/ rho)/pmld        
+                    self.vy[i,j,k]=(pmln*self.vy[i,j,k]+(dsxydx+dsyydy+dsyzdz)*dt/ rho)/pmld
+                    self.vz[i,j,k]=(pmln*self.vz[i,j,k]+(dsxzdx+dsyzdy+dszzdz)*dt/rho)/pmld
+                else:
+                    self.memory_sxx_dx[i,j,k] = self.b_x[i] * self.memory_sxx_dx[i,j,k] + self.a_x[i] * dsxxdx
+                    self.memory_sxy_dy[i,j,k] = self.b_y[j] * self.memory_sxy_dy[i,j,k] + self.a_y[j] * dsxydy
+                    self.memory_sxz_dz[i,j,k] = self.b_z[k] * self.memory_sxz_dz[i,j,k] + self.a_z[k] * dsxzdz
+
+                    self.memory_sxy_dx[i,j,k] = self.b_x[i] * self.memory_sxy_dx[i,j,k] + self.a_x[i] * dsxydx
+                    self.memory_syy_dy[i,j,k] = self.b_y[j] * self.memory_syy_dy[i,j,k] + self.a_y[j] * dsyydy
+                    self.memory_syz_dz[i,j,k] = self.b_z[k] * self.memory_syz_dz[i,j,k] + self.a_z[k] * dsyzdz
+
+                    self.memory_sxz_dx[i,j,k] = self.b_x[i] * self.memory_sxz_dx[i,j,k] + self.a_x[i] * dsxzdx
+                    self.memory_syz_dy[i,j,k] = self.b_y[j] * self.memory_syz_dy[i,j,k] + self.a_y[j] * dsyzdy
+                    self.memory_szz_dz[i,j,k] = self.b_z[k] * self.memory_szz_dz[i,j,k] + self.a_z[k] * dszzdz
+                    dsxxdx = dsxxdx/self.k_x[i] + self.memory_sxx_dx[i,j,k]
+                    dsxydy = dsxydy/self.k_y[j] + self.memory_sxy_dy[i,j,k]
+                    dsxzdz = dsxzdz/self.k_z[k] + self.memory_sxz_dz[i,j,k]
+
+                    dsxydx = dsxydx/self.k_x[i] + self.memory_sxy_dx[i,j,k]
+                    dsyydy = dsyydy/self.k_y[j] + self.memory_syy_dy[i,j,k]
+                    dsyzdz = dsyzdz/self.k_z[k] + self.memory_syz_dz[i,j,k]
+
+                    dsxzdx = dsxzdx/self.k_x[i] + self.memory_sxz_dx[i,j,k]
+                    dsyzdy = dsyzdy/self.k_y[j] + self.memory_syz_dy[i,j,k]
+                    dszzdz = dszzdz/self.k_z[k] + self.memory_szz_dz[i,j,k] 
+                    self.vx[i,j,k]+=(dsxxdx+dsxydy+dsxzdz)*dt/ rho
+                    self.vy[i,j,k]+=(dsxydx+dsyydy+dsyzdz)*dt/ rho 
+                    self.vz[i,j,k]+=(dsxzdx+dsyzdy+dszzdz)*dt/ rho 
+
+            else:
+                self.vx[i,j,k]+=(dsxxdx+dsxydy+dsxzdz)*dt/ rho
+                self.vy[i,j,k]+=(dsxydx+dsyydy+dsyzdz)*dt/ rho 
+                self.vz[i,j,k]+=(dsxzdx+dsyzdy+dszzdz)*dt/ rho      
     # implement Dirichlet boundary conditions on the six edges of the grid
         # xmin
+        '''
         for i,j,k in ti.ndrange(star,ny,nz):
             self.vx[i,j,k]=0
             self.vy[i,j,k]=0
@@ -240,74 +315,105 @@ class ElasticWAVE:
         for i,j,k in ti.ndrange(nx,ny,(nz-star,nz)):
             self.vx[i,j,k]=0
             self.vy[i,j,k]=0  
-            self.vz[i,j,k]=0  
-    # source term  
-        self.vz[isx,isy,isz]+=dt*Ricker(nt,dt,self.f0,1000)/self.rho[isx,isy,isz] 
+            self.vz[i,j,k]=0  '
+        '''
+
        # update sxx szz,syy
         for i,j,k in ti.ndrange((star+1,nx-star),(star+1,ny-star),(star+1,nz-star)):
-            x=(i-star)*dx
-            y=(j-star)*dy
-            z=(k-star)*dz
-            lam_half_x=0.5*(self.lam[i,j,k]+self.lam[i+1,j,k])   
-            mu_half_x =0.5*(self.mu[i,j,k]+self.mu[i+1,j,k])
-            lam_plus_mu_half_x=lam_half_x+2*mu_half_x
-            dvxx=Dx3bm(self.vx,i,j,k,self.c,star)/dx
-            dvyy=Dy3bm(self.vy,i,j,k,self.c,star)/dy
-            dvzz=Dz3bm(self.vz,i,j,k,self.c,star)/dz
-            if (x<=xmin_pml or x>=xmax_pml or y<=ymin_pml or y>=ymax_pml or z<=zmin_pml or z>=zmax_pml):
-                self.memory_dvx_dx[i,j,k] = self.b_x[i] * self.memory_dvx_dx[i,j,k] + self.a_x[i]*dvxx
-                self.memory_dvy_dy[i,j,k] = self.b_y[j] * self.memory_dvy_dy[i,j,k] + self.a_y[j]*dvyy
-                self.memory_dvz_dz[i,j,k] = self.b_z[k] * self.memory_dvz_dz[i,j,k] + self.a_z[k]*dvzz
-                dvxx = dvxx /self.k_x[i] + self.memory_dvx_dx[i,j,k]
-                dvyy = dvyy /self.k_y[j] + self.memory_dvy_dy[i,j,k]
-                dvzz = dvzz /self.k_z[k] + self.memory_dvz_dz[i,j,k]
-            self.sxx[i,j,k]+=(lam_plus_mu_half_x*dvxx+lam_half_x*(dvzz+dvyy))*dt
-            self.syy[i,j,k]+=(lam_plus_mu_half_x*dvyy+lam_half_x*(dvxx+dvzz))*dt
-            self.szz[i,j,k]+=(lam_plus_mu_half_x*dvzz+lam_half_x*(dvxx+dvyy))*dt   
-        for i,j,k in ti.ndrange((star+1,nx-star),(star+1,ny-star),(star,nz-star)):
             x=(i-star)*dx+dx/2
             y=(j-star)*dy+dy/2
-            z=(k-star)*dz
-            mu_half_x_half_y=0.25*(self.mu[i,j+1,k]+self.mu[i,j,k]+self.mu[i,j,k]+self.mu[i+1,j,k])
-            dvyx = Dx3fm(self.vy,i,j,k,self.c,star)/dx
-            dvxy = Dy3fm(self.vx,i,j,k,self.c,star)/dy   
-            if (x<=xmin_pml or x>=xmax_pml or y<=ymin_pml or y>=ymax_pml or z<=zmin_pml or z>=zmax_pml ):
-                self.memory_dvy_dx[i,j,k] = self.b_x_half[i] * self.memory_dvy_dx[i,j,k]+ self.a_x_half[i] * dvyx 
-                self.memory_dvx_dy[i,j,k] = self.b_y_half[j] * self.memory_dvx_dy[i,j,k]+ self.a_y_half[j] * dvxy 
-                dvyx =dvyx /self.k_x_half[i] + self.memory_dvy_dx[i,j,k]
-                dvxy =dvxy /self.k_y_half[j] + self.memory_dvx_dy[i,j,k] 
-            self.sxy[i,j,k]+=mu_half_x_half_y*(dvxy+dvyx)*dt 
-
-        for i,j,k in ti.ndrange((star,nx-star-1),(star,ny-star),(star,nz-star-1)):
-            x=(i-star)*dx+dx/2
-            y=(j-star)*dy
             z=(k-star)*dz+dz/2
-            mu_half_x_half_z=0.25*(self.mu[i,j,k]+self.mu[i+1,j,k]+self.mu[i,j,k]+self.mu[i,j+1,k])
-            dvzx = Dx3fm(self.vz,i,j,k,self.c,star)/dx
-            dvxz = Dz3fm(self.vx,i,j,k,self.c,star)/dz
-            if (x<=xmin_pml or x>=xmax_pml or y<=ymin_pml or y>=ymax_pml or z<=zmin_pml or z>=zmax_pml ):
-                self.memory_dvz_dx[i,j,k] = self.b_x_half[i] * self.memory_dvz_dx[i,j,k]+ self.a_x_half[i] * dvzx 
-                self.memory_dvx_dz[i,j,k] = self.b_z_half[k] * self.memory_dvx_dz[i,j,k]+ self.a_z_half[k] * dvxz 
-                dvzx =dvzx /self.k_x_half[i] + self.memory_dvz_dx[i,j,k]
-                dvxz =dvxz /self.k_z_half[k] + self.memory_dvx_dz[i,j,k] 
-            self.sxz[i,j,k]+= mu_half_x_half_z*(dvxz+dvzx)*dt
+            dl=self.dl
+            lam=self.lam[i,j,k]  
+            mu =self.mu[i,j,k]
+            lam_plus_2mu=lam+2*mu
+            dvxd1=Drd1fm(self.vx,i,j,k,self.c,star)
+            dvxd2=Drd2fm(self.vx,i,j,k,self.c,star)
+            dvxd3=Drd3fm(self.vx,i,j,k,self.c,star)
+            dvxd4=Drd4fm(self.vx,i,j,k,self.c,star)
 
-        for i,j,k in ti.ndrange((star,nx-star),(star,ny-star-1),(star,nz-star-1)):
-            x=(i-star)*dx
-            y=(j-star)*dy+dy/2
-            z=(k-star)*dz+dz/2
-            mu_half_y_half_z=0.25*(self.mu[i,j+1,k]+self.mu[i,j,k]+self.mu[i,j,k+1]+self.mu[i,j,k])
-            dvyz = Dz3fm(self.vy,i,j,k,self.c,star)/dz
-            dvzy = Dy3fm(self.vz,i,j,k,self.c,star)/dy
-            if (x<=xmin_pml or x>=xmax_pml or y<=ymin_pml or y>=ymax_pml or z<=zmin_pml or z>=zmax_pml ):
-                self.memory_dvz_dy[i,j,k] = self.b_y_half[j] * self.memory_dvz_dy[i,j,k]+ self.a_y_half[j] *dvzy 
-                self.memory_dvy_dz[i,j,k] = self.b_z_half[k] * self.memory_dvy_dz[i,j,k]+ self.a_z_half[k] *dvyz 
-                dvzy =dvzy /self.k_y_half[j] + self.memory_dvz_dy[i,j,k]
-                dvyz =dvyz /self.k_z_half[k] + self.memory_dvy_dz[i,j,k] 
-            self.syz[i,j,k]+=mu_half_y_half_z*(dvyz+dvzy)*dt
+            dvyd1=Drd1fm(self.vy,i,j,k,self.c,star)
+            dvyd2=Drd2fm(self.vy,i,j,k,self.c,star)
+            dvyd3=Drd3fm(self.vy,i,j,k,self.c,star)
+            dvyd4=Drd4fm(self.vy,i,j,k,self.c,star)
+
+            dvzd1=Drd1fm(self.vz,i,j,k,self.c,star)
+            dvzd2=Drd2fm(self.vz,i,j,k,self.c,star)
+            dvzd3=Drd3fm(self.vz,i,j,k,self.c,star)
+            dvzd4=Drd4fm(self.vz,i,j,k,self.c,star)
+
+            dvxdx=(dvxd1+dvxd2+dvxd3+dvxd4) /(4*dx)
+            dvxdy=(dvxd1+dvxd2-dvxd3-dvxd4) /(4*dy)
+            dvxdz=(dvxd1-dvxd2+dvxd3-dvxd4) /(4*dz)
+
+            dvydx=(dvyd1+dvyd2+dvyd3+dvyd4) /(4*dx)
+            dvydy=(dvyd1+dvyd2-dvyd3-dvyd4) /(4*dy)
+            dvydz=(dvyd1-dvyd2+dvyd3-dvyd4) /(4*dz) 
+
+            dvzdx=(dvzd1+dvzd2+dvzd3+dvzd4) /(4*dx)
+            dvzdy=(dvzd1+dvzd2-dvzd3-dvzd4) /(4*dy)
+            dvzdz=(dvzd1-dvzd2+dvzd3-dvzd4) /(4*dz)
         
-        self.data[nt]=self.vx[self.rsx,self.rsy,self.rsz]
+            if (x<=xmin_pml or x>=xmax_pml or y<=ymin_pml or y>=ymax_pml or z<=zmin_pml or z>=zmax_pml):
+                if(x<=self.xmin_EAL or x>=self.xmax_EAL or y<=self.ymin_EAL or y>=self.ymax_EAL or z<=self.zmin_EAL or z>=self.zmax_EAL):
+                    damp=ti.sqrt(self.pml_x_half[i]**2+self.pml_y_half[j]**2+self.pml_z_half[k]**2)
+                    kamp=ti.sqrt((self.k_x_half[i]-1)**2+(self.k_y_half[j]-1)**2+(self.k_z_half[k]-1)**2)+1
+                    pmln=(kamp-0.5*dt*damp)   
+                    pmld=(kamp+0.5*dt*damp)
+                    self.sxx[i,j,k]=(pmln*self.sxx[i,j,k]+(lam_plus_2mu*dvxdx+lam*(dvzdz+dvydy))*dt)/pmld        
+                    self.syy[i,j,k]=(pmln*self.syy[i,j,k]+(lam_plus_2mu*dvydy+lam*(dvxdx+dvzdz))*dt)/pmld     
+                    self.szz[i,j,k]=(pmln*self.szz[i,j,k]+(lam_plus_2mu*dvzdz+lam*(dvxdx+dvydy))*dt )/pmld
+
+                        
+
+                    self.sxy[i,j,k]=(pmln*self.sxy[i,j,k]+mu*(dvxdy+dvydx)*dt)/pmld
+                    self.sxz[i,j,k]=(pmln*self.sxz[i,j,k]+mu*(dvxdz+dvzdx)*dt )/pmld
+                    self.syz[i,j,k]=(pmln*self.syz[i,j,k]+ mu*(dvydz+dvzdy)*dt)/pmld
+                else:
+            
+                    self.memory_dvx_dx[i,j,k] = self.b_x_half[i] * self.memory_dvx_dx[i,j,k] + self.a_x_half[i]*dvxdx
+                    self.memory_dvy_dy[i,j,k] = self.b_y_half[j] * self.memory_dvy_dy[i,j,k] + self.a_y_half[j]*dvydy
+                    self.memory_dvz_dz[i,j,k] = self.b_z_half[k] * self.memory_dvz_dz[i,j,k] + self.a_z_half[k]*dvzdz
+
+                    self.memory_dvy_dx[i,j,k] = self.b_x_half[i] * self.memory_dvy_dx[i,j,k] + self.a_x_half[i]*dvydx 
+                    self.memory_dvx_dy[i,j,k] = self.b_y_half[j] * self.memory_dvx_dy[i,j,k] + self.a_y_half[j]*dvxdy 
+
+                    self.memory_dvz_dx[i,j,k] = self.b_x_half[i] * self.memory_dvz_dx[i,j,k] + self.a_x_half[i]*dvzdx 
+                    self.memory_dvx_dz[i,j,k] = self.b_z_half[k] * self.memory_dvx_dz[i,j,k] + self.a_z_half[k]*dvxdz
+
+                    self.memory_dvz_dy[i,j,k] = self.b_y_half[j] * self.memory_dvz_dy[i,j,k] + self.a_y_half[j]*dvzdy 
+                    self.memory_dvy_dz[i,j,k] = self.b_z_half[k] * self.memory_dvy_dz[i,j,k] + self.a_z_half[k]*dvydz 
+
+                    dvxdx = dvxdx /self.k_x_half[i] + self.memory_dvx_dx[i,j,k]
+                    dvydy = dvydy /self.k_y_half[j] + self.memory_dvy_dy[i,j,k]
+                    dvzdz = dvzdz /self.k_z_half[k] + self.memory_dvz_dz[i,j,k]
+
+                    dvydx = dvydx /self.k_x_half[i] + self.memory_dvy_dx[i,j,k]
+                    dvxdy = dvxdy /self.k_y_half[j] + self.memory_dvx_dy[i,j,k]
+
+                    dvzdx = dvzdx /self.k_x_half[i] + self.memory_dvz_dx[i,j,k]
+                    dvxdz = dvxdz /self.k_z_half[k] + self.memory_dvx_dz[i,j,k]
+
+                    dvzdy = dvzdy /self.k_y_half[j] + self.memory_dvz_dy[i,j,k]
+                    dvydz = dvydz /self.k_z_half[k] + self.memory_dvy_dz[i,j,k]
+                    self.sxx[i,j,k]+=(lam_plus_2mu*dvxdx+lam*(dvzdz+dvydy))*dt
+                    self.syy[i,j,k]+=(lam_plus_2mu*dvydy+lam*(dvxdx+dvzdz))*dt
+                    self.szz[i,j,k]+=(lam_plus_2mu*dvzdz+lam*(dvxdx+dvydy))*dt 
+                    self.sxy[i,j,k]+= mu*(dvxdy+dvydx)*dt 
+                    self.sxz[i,j,k]+= mu*(dvxdz+dvzdx)*dt 
+                    self.syz[i,j,k]+= mu*(dvydz+dvzdy)*dt 
+            else:
+                self.sxx[i,j,k]+=(lam_plus_2mu*dvxdx+lam*(dvzdz+dvydy))*dt
+                self.syy[i,j,k]+=(lam_plus_2mu*dvydy+lam*(dvxdx+dvzdz))*dt
+                self.szz[i,j,k]+=(lam_plus_2mu*dvzdz+lam*(dvxdx+dvydy))*dt 
+                self.sxy[i,j,k]+= mu*(dvxdy+dvydx)*dt 
+                self.sxz[i,j,k]+= mu*(dvxdz+dvzdx)*dt 
+                self.syz[i,j,k]+= mu*(dvydz+dvzdy)*dt 
+
+        for i in range(self.datasize):
+            self.data[nt,i]=self.vx[self.rsx[0,i],self.rsy[0,i],self.rsz[0,i]]
     
+
     @staticmethod
     def diff_coff(order:int):
         b=np.zeros((order))
