@@ -1,14 +1,14 @@
 import taichi as ti 
 import numpy as np
 import matplotlib.pyplot as plt
-from src.Elastic3D_SSG_Tensor import ElasticWAVE
+from src.Elastic3D_RSG_EAL_tensor import ElasticWAVE
 from src.wigb import *
 
 import time
 ti.init(arch=ti.vulkan)
-nx=121
-ny=121
-nz=121
+nx=150
+ny=150
+nz=150
 # load model
 vp =ti.field(dtype=ti.f32,shape=(nx,ny,nz))
 vp.fill(3000.)
@@ -64,7 +64,7 @@ if Courant_number > 1 :
     exit()
 # Initialize the wave field
 test=ElasticWAVE(vs,vp,rho,dx,dy,dz,dt,isx,isy,isz,rsx,rsy,rsz,MT,src_scale,nt,accuracy,freq)
-#################### The PML boundary####################                  
+#################### The PML boundary####################                 
 NPoint_Pml = 15                      # The number of grid points in PML layer
 pml_x_thick=NPoint_Pml *dx;          # The thickness of PML layer in x direction
 pml_y_thick=NPoint_Pml *dy;  
@@ -80,9 +80,10 @@ pml_parameter["alpha_max_pml"]=pi*freq        # The maximum alpha value in PML l
 pml_parameter["kmax_pml"]= vs_max/(5*dx*freq)   # The maximum kappa value in PML layer            
 pml_surface=[True,True,True,True,True,True]  # The PML boundary condition in x,y,z direction
 test.SetADEPML3D(pml_surface,pml_parameter)
+
 ts = time.time()
 for i in range(nt):    
-    test.update_SSG(i)
+    test.update_RSG(i)
 ti.sync()
 tend = time.time()    
 print(f'{tend-ts:.3} sec')
@@ -90,11 +91,11 @@ data=test.data.to_numpy()
 #wigb(data)
 plt.plot(data[:,0])
 plt.show()
-'''
-ts = time.time()
 
+ts = time.time()
+'''
 for i in range(nt):
-    test.update_SSG(i)
+    test.update_RSG(i)
     if np.mod(i,20)==0:
         im=test.vx.to_numpy()
         plt.imshow(im[:,isy,:] ,cmap='seismic')  #[isx,:,:]  [:,isx,:] [:,:,isx]

@@ -50,6 +50,12 @@ pml_parameter["alpha_max_pml"]=pi*freq          # The maximum alpha value in PML
 pml_parameter["kmax_pml"]= vs_max/(5*dx*freq)   # The maximum kappa value in PML layer            
 pml_surface=[True,True,True,True]
 test.SetADEPML2D(pml_surface,pml_parameter)
+################### Initial Source ##################### 
+src_type=2      # The type of source
+src_scale=1.
+t0=1.5/test.f0
+test.init_src(src_type,src_scale,t0)
+########################################################
 ts = time.time()
 for i in range(nt):
     test.update_SSG_VS(i)

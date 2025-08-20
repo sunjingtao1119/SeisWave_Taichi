@@ -45,7 +45,7 @@ out = elastic(
 )
 tend = time.time()
 print(f'{tend-ts:.3} sec')
-data=out[14][0][0]
+data=out[14][0][0].to('cpu').numpy()
 
-plt.plot(out[14][0][0])
+plt.plot(data)
 plt.show()

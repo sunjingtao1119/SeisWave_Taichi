@@ -9,10 +9,10 @@ class ElasticWAVE:
                  vs:ti.field, 
                  vp:ti.field,
                  rho:ti.field,
-                 dx:float,
-                 dy:float,
-                 dz:float,
-                 dt:float,
+                 dx:ti.f32,
+                 dy:ti.f32,
+                 dz:ti.f32,
+                 dt:ti.f32,
                  isx:int,
                  isy:int,
                  isz:int,
@@ -47,7 +47,6 @@ class ElasticWAVE:
         self.xmax_EAL=dx*(self.gridsize[1]-1-2*accuracy)-self.xmin_EAL    # Calculate the maximum x-coordinate based on grid size and spacing
         self.ymax_EAL=dy*(self.gridsize[2]-1-2*accuracy)-self.ymin_EAL    # Calculate the maximum z-coordinate based on grid size and spacing
         self.zmax_EAL=dz*(self.gridsize[0]-1-2*accuracy)-self.zmin_EAL    # Calculate the maximum z-coordinate based on grid size and spacing
-
 
         self.mu=self.Compute_mu(fieldtype)
         self.lam=self.Compute_lam(fieldtype)
@@ -87,7 +86,7 @@ class ElasticWAVE:
         self.pml_y_half  =ti.field(fieldtype,shape=self.gridsize[2])   # half grid
         self.alpha_y     =ti.field(fieldtype,shape=self.gridsize[2])
         self.alpha_y_half=ti.field(fieldtype,shape=self.gridsize[2])   # half grid
-        self.k_y        =ti.field(fieldtype,shape=self.gridsize[2])
+        self.k_y         =ti.field(fieldtype,shape=self.gridsize[2])
         self.k_y_half    =ti.field(fieldtype,shape=self.gridsize[2])   # half grid
         self.b_y         =ti.field(fieldtype,shape=self.gridsize[2])
         self.b_y_half    =ti.field(fieldtype,shape=self.gridsize[2])   # half grid
@@ -387,11 +386,10 @@ class ElasticWAVE:
                 self.sxy[k,i,j]+= mu*(dvxdy+dvydx)*dt 
                 self.sxz[k,i,j]+= mu*(dvxdz+dvzdx)*dt 
                 self.syz[k,i,j]+= mu*(dvydz+dvzdy)*dt 
+        self.data[nt]=self.vx[self.rsz,self.rsx,self.rsy]
 
-        
+        '''
         for k,i,j in ti.ndrange((self.star+self.pml_layer_num,nz-self.star-self.pml_layer_num),(self.star+self.pml_layer_num,nx-self.star-self.pml_layer_num),(self.star+self.pml_layer_num,ny-self.star-self.pml_layer_num)):
-            '''
-            '''
             E=self.mu[k,i,j]*(3*self.lam[k,i,j]+2*self.mu[k,i,j])/(self.lam[k,i,j]+self.mu[k,i,j])  # Young's modulus
             G=self.mu[k,i,j]
             nu=self.lam[k,i,j]/(2*(self.lam[k,i,j]+self.mu[k,i,j]))  # shear modulus
@@ -405,8 +403,7 @@ class ElasticWAVE:
             self.data[nt]+=self.rho[k,i,j]*(self.vx[k,i,j]**2+self.vy[k,i,j]**2+self.vz[k,i,j]**2)/2
             #self.data[nt]+=(self.sxx[k,i,j]*xi_xx+self.szz[k,i,j]*xi_zz+self.syy[k,i,j]*xi_yy
                             #+self.sxz[k,i,j]*xi_xz+self.syz[k,i,j]*xi_yz+self.sxy[k,i,j]*xi_xy)/2
-            
-    
+        '''         
 
     @staticmethod
     def diff_coff(order:int):

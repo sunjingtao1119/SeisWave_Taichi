@@ -90,6 +90,7 @@ class ElasticWAVE:
         self.memory_dvx_dz=ti.field(dtype=fieldtype,shape=self.gridsize) 
         self.memory_dvz_dx=ti.field(dtype=fieldtype,shape=self.gridsize)
         self.memory_dvz_dz=ti.field(dtype=fieldtype,shape=self.gridsize)
+        self.init_src(1,1.0,0.0)  # Initialize source with Ricker wavelet
 
     def Compute_mu(self,fieldtype):
         size=self.vs.shape
@@ -183,7 +184,7 @@ class ElasticWAVE:
         # add source
       
         for i,j in ti.ndrange((-1,1),(-1,1)):
-            self.vz[isx+i+5,isz+j+5]+=dt*self.src[nt] / (4*self.rho[isx+i+5,isz+j+5])
+            self.vz[isx+i,isz+j]+=dt*self.src[nt] / (4*self.rho[isx+i,isz+j])
        # update sxx szz
        # update sxx szz
         for i,j in ti.ndrange((star,nx-star-1),(star,nz-star-1)):

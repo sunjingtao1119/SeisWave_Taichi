@@ -59,9 +59,9 @@ for i in range(nt):
 tend = time.time()
 print(f'{tend-ts:.3} sec')
 
-#data=test.data.to_numpy()
-#plt.plot(test.data)
-#plt.show()
+data=test.data.to_numpy()
+plt.plot(test.data)
+plt.show()
 '''
 
 for i in range(nt):  

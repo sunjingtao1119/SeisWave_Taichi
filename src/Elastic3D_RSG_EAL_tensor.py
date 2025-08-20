@@ -20,7 +20,8 @@ class ElasticWAVE:
                  rsx:int,
                  rsy:int,
                  rsz:int,
-                 MT:ti.field,  
+            MT:ti.field, 
+                 src_scale:float, 
                  nt:int,               
                  accuracy:int,
                  freq=100,
@@ -41,9 +42,9 @@ class ElasticWAVE:
         self.xmax=dx*(self.gridsize[1]-1-2*accuracy)-self.xmin    # Calculate the maximum x-coordinate based on grid size and spacing
         self.ymax=dy*(self.gridsize[2]-1-2*accuracy)-self.ymin    # Calculate the maximum z-coordinate based on grid size and spacing
         self.zmax=dz*(self.gridsize[0]-1-2*accuracy)-self.zmin    # Calculate the maximum z-coordinate based on grid size and spacing
-        self.xmin_EAL=10*dx
-        self.ymin_EAL=10*dy
-        self.zmin_EAL=10*dz
+        self.xmin_EAL=5*dx
+        self.ymin_EAL=5*dy
+        self.zmin_EAL=5*dz
         self.star=accuracy
         self.c=self.diff_coff(accuracy)
         self.xmax_EAL=dx*(self.gridsize[1]-1-2*accuracy)-self.xmin_EAL    # Calculate the maximum x-coordinate based on grid size and spacing
@@ -63,13 +64,7 @@ class ElasticWAVE:
         self.rsy=rsy
         self.rsz=rsz
         self.MT=MT
-        index=ti.field(dtype=int,shape=(3))
-        index[0]=-2
-        index[1]=0
-        index[2]=2
-        self.xindex=index
-        self.yindex=index
-        self.zindex=index
+        self.src_scale=src_scale
         datasize=rsx.shape[1]
         self.datasize=datasize
         self.data=ti.field(dtype=ti.f32,shape=(nt,datasize))
@@ -406,10 +401,12 @@ class ElasticWAVE:
                 self.szz[k,i,j]+=(lam_plus_2mu*dvzdz+lam*(dvxdx+dvydy))*dt 
                 self.sxy[k,i,j]+= mu*(dvxdy+dvydx)*dt 
                 self.sxz[k,i,j]+= mu*(dvxdz+dvzdx)*dt 
-                self.syz[k,i,j]+= mu*(dvydz+dvzdy)*dt 
+                self.syz[k,i,j]+= mu*(dvydz+dvzdy)*dt
+        for i in range(self.datasize):
+            self.data[nt,i]=self.vx[self.rsz[0,i],self.rsx[0,i],self.rsy[0,i]] 
 
         
-    
+   
 
     @staticmethod
     def diff_coff(order:int):

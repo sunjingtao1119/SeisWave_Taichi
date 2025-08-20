@@ -107,7 +107,7 @@ class ElasticWAVE:
         vs_np=self.vs.to_numpy()
         vp_np=self.vp.to_numpy()
         rho_np=self.rho.to_numpy()
-        lam_np=rho_np*(vp_np**2-vs_np**2)
+        lam_np=rho_np*(vp_np**2-2*vs_np**2)
         lam=ti.field(dtype=fieldtype,shape=size)
         lam.from_numpy(lam_np)
         return lam

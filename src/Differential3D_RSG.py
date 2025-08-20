@@ -1,6 +1,6 @@
 import taichi as ti
 '''
-  c is ti.field and used to store the n-point stencil differece coefficient
+  coff is ti.field and used to store the n-point stencil differece coefficient
 '''
 ## 3D differential Lebedev Staggered Grid ###
 # Forward difference

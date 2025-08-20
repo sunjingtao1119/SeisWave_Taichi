@@ -253,7 +253,7 @@ class ElasticWAVE:
             self.vz[i,j]+=(dszzdz+dsxzdx)*dt/rho_half_z
 
         # add source
-        self.vx[isx,isz]+=dt*self.src[nt]  /self.rho[isx,isz] 
+        self.vx[isx,isz]+=dt*self.src[nt] /self.rho[isx,isz] 
        # update sxx szz
         for i,j in ti.ndrange((star+1,nx-star),(star+1,nz-star)):
             x=(i-star)*dx
@@ -282,6 +282,7 @@ class ElasticWAVE:
                 dvzdx =dvzdx /self.k_x_half[i] + self.memory_dvz_dx[i,j]
                 dvxdz =dvxdz /self.k_z_half[j] + self.memory_dvx_dz[i,j] 
             self.sxz[i,j]+=mu_half_xhalf_z*(dvxdz+dvzdx)*self.dt
+
         self.data[nt]=self.vx[self.rsx,self.rsz]
     
     @staticmethod

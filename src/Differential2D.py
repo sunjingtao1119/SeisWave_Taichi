@@ -39,7 +39,6 @@ def DLSz2fm(fieldz,i,j,coff,n):
     for id in range(n):
         value += coff[id] * (fieldz[i, j+2*id+1] - fieldz[i, j-2*id-1])
     return value
-
 ## 2D differential Rotated Staggered Grid ### 
 # Forward difference
 @ti.func
