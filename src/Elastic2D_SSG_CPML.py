@@ -110,7 +110,7 @@ class ElasticWAVE:
         lam.from_numpy(lam_np)
         return lam
     @ti.kernel
-    def init_src(self,src_type:int,src_scale:float,t0:float):
+    def init_src(self,src_type:int,src_scale:float):
         dt=self.dt
         f0=self.f0
         if src_type==1:
@@ -118,7 +118,7 @@ class ElasticWAVE:
                 self.src[i]=Ricker(i,dt,f0,src_scale)
         if src_type==2:
             for i in ti.ndrange(self.nt):
-                self.src[i]=Ricker2(i,dt,t0,f0,src_scale)
+                self.src[i]=Ricker2(i,dt,f0,src_scale)
     
     # Freedome boundary condtion 
     @ti.kernel
@@ -150,7 +150,6 @@ class ElasticWAVE:
         zmax_pml = self.zmax_pml
         nx=self.gridsize[0]
         nz=self.gridsize[1]
-        t0=1.5/self.f0
         # update vx
         for i,j in ti.ndrange((star+1,nx-star),(star+1,nz-star)):
             x=(i-star)*dx
@@ -177,8 +176,9 @@ class ElasticWAVE:
                 dszzdz = dszzdz /self.k_z_half[j] + self.memory_szz_dz[i,j]
             self.vz[i,j]+=(dszzdz+dsxzdx)*dt/rho_half_x_half_z
        # add source
-
-        self.vz[isx,isz]+=dt*self.src[nt] /self.rho[isx,isz] 
+        self.sxx[isx,isz]+=self.src[nt]
+        self.szz[isx,isz]+=self.src[nt]
+        #self.vz[isx,isz]+=dt*self.src[nt] /self.rho[isx,isz] 
        # update sxx szz
         for i,j in ti.ndrange((star,nx-star-1),(star+1,nz-star)):
             x=(i-star)*dx+dx/2
@@ -253,7 +253,8 @@ class ElasticWAVE:
             self.vz[i,j]+=(dszzdz+dsxzdx)*dt/rho_half_z
 
         # add source
-        self.vx[isx,isz]+=dt*self.src[nt] /self.rho[isx,isz] 
+        self.sxx[isx,isz]+=self.src[nt]
+        self.szz[isx,isz]+=self.src[nt]
        # update sxx szz
         for i,j in ti.ndrange((star+1,nx-star),(star+1,nz-star)):
             x=(i-star)*dx

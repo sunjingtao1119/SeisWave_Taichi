@@ -2,7 +2,6 @@ import taichi as ti
 '''
   coff is ti.field and used to store the n-point stencil differece coefficient
 '''
-## 3D differential Lebedev Staggered Grid ###
 # Forward difference
 @ti.func
 def Drd1fm(fieldx,k,i,j,coff,n):

@@ -2,31 +2,32 @@ import taichi as ti
 import numpy as np
 import matplotlib.pyplot as plt
 from src.Elastic2D_SSG_CPML import ElasticWAVE
+from scipy.io import savemat
 import time
 ti.init(arch=ti.gpu)
 # load model
-nx=512
-nz=512
+nx=241
+nz=241
 vp =ti.field(dtype=ti.f32,shape=(nx,nz))
 vp.fill(2000.) 
 vs =ti.field(dtype=ti.f32,shape=(nx,nz))
 vs.fill(1150.)
 rho=ti.field(dtype=ti.f32,shape=(nx,nz))
 rho.fill(2000)
-dx=1
-dz=1
-accuracy=2   #  3 denotes 6th-order staggered-grid
+dx=2
+dz=2
+accuracy=4   #  3 denotes 6th-order staggered-grid
 vp_max=2000 
 vs_max=1150   
 # Set source and receiver points
 isx=int(240/2)    #source 
 isz=int(240/2)
-rsx=int(240/2+45) #receiver
-rsz=int(240/2+45)
-nt=1000
-dt=1e-4
+rsx=int(240/2+40) #receiver
+rsz=int(240/2+40)
+nt=801
+dt=3e-4
 pi=np.pi
-freq=100 
+freq=40
 src_scale=1
 # Stability analysis
 Courant_number = vp_max * dt * np.sqrt(1/dx**2 + 1/dz**2)
@@ -51,17 +52,20 @@ pml_parameter["kmax_pml"]= vs_max/(5*dx*freq)   # The maximum kappa value in PML
 pml_surface=[True,True,True,True]
 test.SetADEPML2D(pml_surface,pml_parameter)
 ################### Initial Source ##################### 
-src_type=1      # The type of source
+src_type=2       # The type of so urce
 src_scale=1.
-t0=1/test.f0
-test.init_src(src_type,src_scale,t0)
+
+test.init_src(src_type,src_scale)
 ########################################################
 ts = time.time()
 for i in range(nt):
-    test.update_SSG_VS(i)
+    test.update_SSG_SV(i)
 tend = time.time()
 print(f'{tend-ts:.3} sec')
-
+data=test.data.to_numpy()
+file_name = 'data2d_ssg8.mat'
+savemat(file_name, {'data2d_ssg8': data})
+ 
 plt.plot(test.data)
 plt.show()
 '''

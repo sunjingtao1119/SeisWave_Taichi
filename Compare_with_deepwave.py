@@ -1,4 +1,6 @@
-import torch
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'  # Allow duplicate loading of DLLs
+import torch    
 import matplotlib.pyplot as plt
 import deepwave
 from deepwave import elastic
@@ -7,7 +9,7 @@ import time
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #device = torch.device('cpu')
 ny = 512
-nx = 512
+nx = 512  
 dx = 1
 
 vp = torch.ones(ny, nx, device=device) * 2500

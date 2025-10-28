@@ -1,14 +1,15 @@
 # SeisWave_Taichi
- This study presents a high-performance Python solution for 2D and 3-D parallel finite-difference seismic wave propagation that is based on the Taichi lang.
+ This study presents a high-performance Python solution for 2D and 3-D parallel finite-difference seismic wave propagation that is based on the Taichi lang. Support standard staggered grid and rotating staggered grid.
 # Installation
-Copy the source file directly to the computer, and then run the test2d_homegenous.py
+Copy the source file directly to the computer, and then run the test2d_homegenous.py. 
+It is recommended to use Vscode
 # Requirements
 Program language: Python 3.9,3.10
 
 Hardware requirements: GEFORCE RTX 30 series GPU
 
 Software required: 
-The python library you need has Taichi (1.7.3)\
+The python library you need has Taichi (1.7.3,1.7.4)\
 NumPy
 Matplotlib
 The Operating system you need Window 11 or Ubuntu.
@@ -28,3 +29,5 @@ Taichi supports GPU acceleration using vulkan.
  ti.init(arch=ti.vulkan)  #  ti.cuda
 ```
 Taichi and Python share a similar syntax, but they are not identical.https://docs.taichi-lang.cn/docs/kernel_function） 
+
+

@@ -2,9 +2,11 @@ import taichi as ti
 import numpy as np
 import matplotlib.pyplot as plt
 from src.Elastic3D_SSG_Tensor import ElasticWAVE
+from src.BaseKernel import Ricker2
+from scipy.io import savemat
 import scipy.io as sio
 import time
-ti.init(arch=ti.gpu)
+ti.init(arch=ti.vulkan)
 # load model
 data = sio.loadmat('overhustp.mat')
 vp_np=data["Vp"]
@@ -20,51 +22,55 @@ vs =ti.field(dtype=ti.f32,shape=(nx,ny,nz))
 vs.from_numpy(vs_np)
 rho=ti.field(dtype=ti.f32,shape=(nx,ny,nz))
 rho.from_numpy(rho_np)
-dx=10
-dy=10
-dz=10
-nt=1000
+dx=5
+dy=5
+dz=5
+nt=500
 accuracy=5        # 5  denotes 10 th-order staggered-grid
 # Set receiver points
-rsx_np=np.ones((1,161),dtype=int)
-rsx_np=20*rsx_np
-rsy_np=np.linspace(20,180,161,dtype=int)
-rsy_np=rsy_np.reshape(1,161)
-rsz_np=np.ones((1,161),dtype=int)
-rsz_np=20*rsz_np
-rsx=ti.field(dtype=int,shape=(1,161))
+rsx_np=np.ones((1,81),dtype=int)
+rsx_np=60*rsx_np
+rsz_np=np.linspace(50,130,81,dtype=int)
+rsz_np=rsz_np.reshape(1,81)
+rsy_np=np.ones((1,81),dtype=int)
+rsy_np=60*rsy_np
+rsx=ti.field(dtype=int,shape=(1,81))
 rsx.from_numpy(rsx_np)
-rsy=ti.field(dtype=int,shape=(1,161))
+rsy=ti.field(dtype=int,shape=(1,81))
 rsy.from_numpy(rsy_np)
-rsz=ti.field(dtype=int,shape=(1,161))
+rsz=ti.field(dtype=int,shape=(1,81))
 rsz.from_numpy(rsz_np)
+
 # Set source points
 isx=int(99)  
 isy=int(99)
-isz=int(49)
-dt=0.0005
+isz=int(90)
+dt=0.0003
 pi=np.pi
-freq=30
+freq= 30
 src_scale=1
+src=ti.field(dtype=ti.f32,shape=(nt))   # intialize the source wavelet
+Ricker2(src,nt,dt,freq,src_scale) 
 # Moment tensor source implementation
 MT=ti.field(dtype=ti.f32,shape=((3,3)))
-MT[0,0]=0
-MT[0,1]=1/ti.sqrt(2)
+MT[0,0]=1/ti.sqrt(2)  
+MT[0,1]=0
 MT[0,2]=0
-MT[1,0]=1/ti.sqrt(2)
-MT[1,1]=0
+MT[1,0]=0
+MT[1,1]=1/ti.sqrt(2)
 MT[1,2]=0
 MT[2,0]=0
 MT[2,1]=0
-MT[2,2]=0  
+MT[2,2]=1/ti.sqrt(2) 
 # Stability analysis
+
 Courant_number = vp_max * dt * np.sqrt(1/dx**2 + 1/dy**2+1/dz**2)
 print(Courant_number)
 if Courant_number > 1 :
     print('time step is too large, simulation will be unstable')
     exit()
 # Initialize the wave field
-test=ElasticWAVE(vs,vp,rho,dx,dy,dz,dt,isx,isy,isz,rsx,rsy,rsz,MT,src_scale,nt,accuracy,freq)
+test=ElasticWAVE(vs,vp,rho,dx,dy,dz,dt,isx,isy,isz,rsx,rsy,rsz,MT,nt,accuracy,freq)
 #################### The PML boundary####################               
 NPoint_Pml = 15                      # The number of grid points in PML layer
 pml_x_thick=NPoint_Pml *dx;          # The thickness of PML layer in x direction
@@ -81,20 +87,21 @@ pml_parameter["alpha_max_pml"]=pi*freq        # The maximum alpha value in PML l
 pml_parameter["kmax_pml"]= vs_max/(5*dx*freq)   # The maximum kappa value in PML layer            
 pml_surface=[True,True,True,True,True,True]  # The PML boundary condition in x,y,z direction
 test.SetADEPML3D(pml_surface,pml_parameter)
+'''
 ts = time.time()
 for i in range(nt):
-    test.update_SSG(i)
+    test.update_SSG(i,src[i])
 tend = time.time()
 print(f'{tend-ts:.3} sec')    
 data=test.data.to_numpy()
-plt.imshow(data)
-#plt.plot(data[:,0])
-plt.show()
-'''
-ts = time.time()
+file_name = 'data_x.mat'
+savemat(file_name, {'data_x': data})
 
+
+ts = time.time()
+'''
 for i in range(nt):
-    test.update_SSG(i)
+    test.update_SSG(i,src[i])
     if np.mod(i,20)==0:
         im=test.vx.to_numpy()
         plt.imshow(im[:,isy,:] ,cmap='seismic')  #[isx,:,:]  [:,isx,:] [:,:,isx]
@@ -103,10 +110,15 @@ for i in range(nt):
         plt.pause(0.01)
         plt.cla()
         plt.clf()
+
+data=im[:,isy,:]
+file_name = 'data3d_x.mat'
+savemat(file_name, {'data3d_x': data})
+
 #print(test.k_z)
-plt.imshow(im[:,isy,:],cmap='seismic')
+plt.imshow(im[:,isy,:],cmap='seismic') 
 plt.colorbar()
 plt.clim(-1e-10,1e-10)
 plt.show()
-'''
+
 

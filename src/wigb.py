@@ -6,10 +6,10 @@ def wigb(a=[],scal=0,x=0,z=0,amx=0):
 #
 #  WIGB(a,scal,x,z,amx) 
 #
-#  IN  a:     地震数据 (a ndarray, traces are columns)
+#  IN  a:     data (a ndarray, traces are columns)
 #      scale: multiple data by scal
-#      x:     x轴(often offset)
-#      z:     y轴 (often time)
+#      x:     x-axis(often offset)
+#      z:     y-axis (often time)
 #
 #  Note
 #

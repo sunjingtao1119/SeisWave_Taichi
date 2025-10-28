@@ -2,7 +2,8 @@ import taichi as ti
 import numpy as np
 import matplotlib.pyplot as plt
 from src.Elastic3D_SSG_Tensor import ElasticWAVE
-from src.wigb import *
+from  src.BaseKernel import Ricker, Ricker2
+from scipy.io import savemat
 
 import time
 ti.init(arch=ti.vulkan)
@@ -13,15 +14,15 @@ nz=121
 vp =ti.field(dtype=ti.f32,shape=(nx,ny,nz))
 vp.fill(3000.)
 vs =ti.field(dtype=ti.f32,shape=(nx,ny,nz))
-temp=3000/1.67
+temp=3000./1.67
 vs.fill(temp)
 rho=ti.field(dtype=ti.f32,shape=(nx,ny,nz))
-rho.fill(2500.)
+rho.fill(2500)
 dx=2.5
 dy=2.5
 dz=2.5
 nt=801
-accuracy=5        #  3 denotes 6th-order staggered-grid
+accuracy=4        #  3 denotes 6th-order staggered-grid
 vp_max=3000
 vs_max=temp 
 # 接收点位置
@@ -35,27 +36,30 @@ rsx=ti.field(dtype=int,shape=(1,81))
 rsx.from_numpy(rsx_np)
 rsy=ti.field(dtype=int,shape=(1,81))
 rsy.from_numpy(rsy_np)
-rsz=ti.field(dtype=int,shape=(1,81))
+rsz=ti.field(dtype=int,shape=(1,81))    
 rsz.from_numpy(rsz_np)
 # 震源设置
 isx=int(61)  # 震源位置
 isy=int(61)
 isz=int(101)
-dt=0.0001
+dt=0.0003
 pi=np.pi
-freq=30
+freq=60
 src_scale=1
+src=ti.field(dtype=ti.f32,shape=(nt))   # intialize the source wavelet
+# Generate Ricker wavelet
+Ricker2(src,nt,dt,freq,src_scale)
 # Moment tensor source implementation
 MT=ti.field(dtype=ti.f32,shape=((3,3)))
 MT[0,0]=0
-MT[0,1]=0
+MT[0,1]=ti.sqrt(1/2)
 MT[0,2]=0
-MT[1,0]=0
+MT[1,0]=ti.sqrt(1/2)
 MT[1,1]=0
-MT[1,2]=-1/ti.sqrt(2)
+MT[1,2]=0
 MT[2,0]=0
-MT[2,1]=-1/ti.sqrt(2)
-MT[2,2]=0  
+MT[2,1]=0
+MT[2,2]=0 
 # Stability analysis
 Courant_number = vp_max * dt * np.sqrt(1/dx**2 + 1/dy**2+1/dz**2)
 print(Courant_number)
@@ -80,15 +84,19 @@ pml_parameter["alpha_max_pml"]=pi*freq        # The maximum alpha value in PML l
 pml_parameter["kmax_pml"]= vs_max/(5*dx*freq)   # The maximum kappa value in PML layer            
 pml_surface=[True,True,True,True,True,True]  # The PML boundary condition in x,y,z direction
 test.SetADEPML3D(pml_surface,pml_parameter)
+
 ts = time.time()
 for i in range(nt):    
-    test.update_SSG(i)
+    test.update_SSG(i,src[i])
 ti.sync()
 tend = time.time()    
 print(f'{tend-ts:.3} sec')
 data=test.data.to_numpy()
+data=data[:,0]
+file_name = 'data.mat'
+savemat(file_name,{'data': data})
 #wigb(data)
-plt.plot(data[:,0])
+plt.plot(data)
 plt.show()
 '''
 ts = time.time()
@@ -99,14 +107,14 @@ for i in range(nt):
         im=test.vx.to_numpy()
         plt.imshow(im[:,isy,:] ,cmap='seismic')  #[isx,:,:]  [:,isx,:] [:,:,isx]
         plt.colorbar()
-        plt.clim(-1e-8,1e-8)
+        plt.clim(-1e-10,1e-10)
         plt.pause(0.01)
         plt.cla()
         plt.clf()
 #print(test.k_z)
 plt.imshow(im[:,isy,:],cmap='seismic')
 plt.colorbar()
-plt.clim(-1e-8,1e-8)
+plt.clim(-1e-10,1e-10)
 plt.show()
 '''
 

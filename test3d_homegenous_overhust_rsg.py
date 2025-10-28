@@ -1,61 +1,69 @@
 import taichi as ti 
 import numpy as np
 import matplotlib.pyplot as plt
-from src.Elastic3D_RSG_EAL_tensor import ElasticWAVE
-from src.wigb import *
-
+from src.Elastic3D_RSG_EAL_v1 import ElasticWAVE
+from src.BaseKernel import Ricker2
+from scipy.io import savemat
+import scipy.io as sio
 import time
 ti.init(arch=ti.vulkan)
-nx=150
-ny=150
-nz=150
 # load model
+data = sio.loadmat('overhustp.mat')
+#a=data["Vp"]
+#vp_np=np.moveaxis(a, 2, 0)
+vp_np=data["Vp"]
+vp_max=np.max(vp_np)
+nx,ny,nz=vp_np.shape
+vs_np=vp_np/1.7
+vs_max=np.max(vs_np)
+rho_np=1.741*(vp_np/1000)**(0.25)*1000
+
 vp =ti.field(dtype=ti.f32,shape=(nx,ny,nz))
-vp.fill(3000.)
+vp.from_numpy(vp_np)
 vs =ti.field(dtype=ti.f32,shape=(nx,ny,nz))
-temp=3000/1.67
-vs.fill(temp)
+vs.from_numpy(vs_np)
 rho=ti.field(dtype=ti.f32,shape=(nx,ny,nz))
-rho.fill(2500.)
-dx=2.5
-dy=2.5
-dz=2.5
-nt=801
-accuracy=5        #  3 denotes 6th-order staggered-grid
-vp_max=3000
-vs_max=temp 
-# 接收点位置
+rho.from_numpy(rho_np)
+dx=5
+dy=5
+dz=5
+nt=1000
+accuracy=5        # 5  denotes 10 th-order staggered-grid
+# Set receiver points
 rsx_np=np.ones((1,81),dtype=int)
-rsx_np=21*rsx_np
-rsy_np=np.ones((1,81),dtype=int)
-rsy_np=21*rsy_np
-rsz_np=np.linspace(21,101,81,dtype=int)
+rsx_np=60*rsx_np
+rsz_np=np.linspace(50,130,81,dtype=int)
 rsz_np=rsz_np.reshape(1,81)
+rsy_np=np.ones((1,81),dtype=int)
+rsy_np=60*rsy_np
 rsx=ti.field(dtype=int,shape=(1,81))
 rsx.from_numpy(rsx_np)
 rsy=ti.field(dtype=int,shape=(1,81))
 rsy.from_numpy(rsy_np)
 rsz=ti.field(dtype=int,shape=(1,81))
 rsz.from_numpy(rsz_np)
-# 震源设置
-isx=int(61)  # 震源位置
-isy=int(61)
-isz=int(101)
-dt=0.0001
+
+# Set source points
+isx=int(99)  
+isy=int(99)
+isz=int(90)
+dt=0.0003
 pi=np.pi
 freq=30
 src_scale=1
+src=ti.field(dtype=ti.f32,shape=(nt))   # intialize the source wavelet
+Ricker2(src,nt,dt,freq,src_scale) 
 # Moment tensor source implementation
 MT=ti.field(dtype=ti.f32,shape=((3,3)))
-MT[0,0]=0
+MT[0,0]=1/ti.sqrt(2)
 MT[0,1]=0
 MT[0,2]=0
 MT[1,0]=0
-MT[1,1]=0
-MT[1,2]=-1/ti.sqrt(2)
+MT[1,1]=1/ti.sqrt(2)
+MT[1,2]=0
 MT[2,0]=0
-MT[2,1]=-1/ti.sqrt(2)
-MT[2,2]=0  
+MT[2,1]=0
+MT[2,2]=1/ti.sqrt(2) 
 # Stability analysis
 Courant_number = vp_max * dt * np.sqrt(1/dx**2 + 1/dy**2+1/dz**2)
 print(Courant_number)
@@ -63,9 +71,9 @@ if Courant_number > 1 :
     print('time step is too large, simulation will be unstable')
     exit()
 # Initialize the wave field
-test=ElasticWAVE(vs,vp,rho,dx,dy,dz,dt,isx,isy,isz,rsx,rsy,rsz,MT,src_scale,nt,accuracy,freq)
-#################### The PML boundary####################                 
-NPoint_Pml = 15                      # The number of grid points in PML layer
+test=ElasticWAVE(vs,vp,rho,dx,dy,dz,dt,isx,isy,isz,rsx,rsy,rsz,nt,accuracy,freq)
+#################### The PML boundary####################               
+NPoint_Pml = 25                      # The number of grid points in PML layer
 pml_x_thick=NPoint_Pml *dx;          # The thickness of PML layer in x direction
 pml_y_thick=NPoint_Pml *dy;  
 pml_z_thick=NPoint_Pml *dz;          # The thickness of PML layer in z direction
@@ -82,32 +90,35 @@ pml_surface=[True,True,True,True,True,True]  # The PML boundary condition in x,y
 test.SetADEPML3D(pml_surface,pml_parameter)
 
 ts = time.time()
-for i in range(nt):    
-    test.update_RSG(i)
+for i in range(nt):
+    test.update_RSG(i,src[i])
 ti.sync()
-tend = time.time()    
-print(f'{tend-ts:.3} sec')
+tend = time.time()
+print(f'{tend-ts:.3} sec')    
 data=test.data.to_numpy()
-#wigb(data)
-plt.plot(data[:,0])
-plt.show()
+file_name = 'datar_x.mat'
+savemat(file_name, {'datar_x': data})
 
 ts = time.time()
 '''
 for i in range(nt):
-    test.update_RSG(i)
+    test.update_RSG(i,src[i])
     if np.mod(i,20)==0:
         im=test.vx.to_numpy()
         plt.imshow(im[:,isy,:] ,cmap='seismic')  #[isx,:,:]  [:,isx,:] [:,:,isx]
         plt.colorbar()
-        plt.clim(-1e-8,1e-8)
+        plt.clim(-1e-10,1e-10)
         plt.pause(0.01)
         plt.cla()
         plt.clf()
+data=im[:,isy,:]
+file_name = 'datar3d_x.mat'
+savemat(file_name, {'datar3d_x': data})
+
 #print(test.k_z)
 plt.imshow(im[:,isy,:],cmap='seismic')
 plt.colorbar()
-plt.clim(-1e-8,1e-8)
+plt.clim(-1e-10,1e-10)
 plt.show()
 '''
 

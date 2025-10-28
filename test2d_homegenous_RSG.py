@@ -3,30 +3,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 from src.Elastic2D_RSG_CPML import ElasticWAVE
 import time
+from scipy.io import savemat
 ti.init(arch=ti.gpu)
-nx=512
-nz=512
+nx=241
+nz=241
 # load model
 vp =ti.field(dtype=ti.f32,shape=(nx,nz))
-vp.fill(2500.) 
+vp.fill(2000.) 
 vs =ti.field(dtype=ti.f32,shape=(nx,nz))
-vs.fill(1500.)
+vs.fill(1150.)
 rho=ti.field(dtype=ti.f32,shape=(nx,nz))
-rho.fill(2200)
-dx=1
-dz=1
-accuracy=5   #  4 denotes 8th-order staggered-grid
+rho.fill(2000)
+dx=2
+dz=2
+accuracy=2   #  4 denotes 8th-order staggered-grid
 vp_max=2000 
 vs_max=1150  
 # Set source and receiver points
 isx=int(nx/2)    #source 
 isz=int(nz/2)
-rsx=int(nx/2+50) #receiver
-rsz=int(nz/2+50)
-nt=2000
-dt=1e-4
+rsx=int(nx/2+40) #receiver
+rsz=int(nz/2+40)
+nt=801
+dt=3e-4
 pi=np.pi
-freq=60
+freq=40
 src_scale=1
 # Stability analysis
 Courant_number = vp_max * dt * np.sqrt(1/dx**2 + 1/dz**2)
@@ -54,8 +55,8 @@ test.SetADEPML2D(pml_surface,pml_parameter)
 ################### Initial Source ##################### 
 src_type=2      # The type of source
 src_scale=1.
-t0=1.5/test.f0
-test.init_src(src_type,src_scale,t0)
+t0=1/test.f0
+test.init_src(src_type,src_scale)
 ########################################################
 
 ts = time.time()
@@ -63,22 +64,24 @@ for i in range(nt):
     test.update_RSG(i)
 tend = time.time()
 print(f'{tend-ts:.3} sec')
+data=test.data.to_numpy()
 plt.plot(test.data)
 plt.show()
-#data=test.data.to_numpy()
-data=test.vx.to_numpy()
+file_name = 'data2d_rsg4.mat'
+savemat(file_name, {'data2d_rsg4': data})   
+ 
 '''
 for i in range(nt):  
     test.update_RSG(i) 
     if np.mod(i,20)==0:
         plt.imshow(test.vz.to_numpy(),cmap='seismic')
-        plt.clim(-1e-9,1e-9)
+        plt.clim(-1e-8,1e-8)
         plt.colorbar()
         plt.pause(0.005) 
         plt.cla()
         plt.clf()
 plt.imshow(test.vz.to_numpy(),cmap='seismic')
-plt.clim(-1e-9,1e-9)
+plt.clim(-1e-8,1e-8)
 plt.colorbar()
 plt.show() 
 '''

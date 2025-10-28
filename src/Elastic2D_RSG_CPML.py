@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from src.Differential2D import Drx2bm,Drz2fm,Drx2fm,Drz2bm
 from src.BaseFun import Ricker,Ricker2
+from src.FD_Liu import FD_liu
 pi=ti.math.pi
 
 @ti.data_oriented
@@ -90,7 +91,7 @@ class ElasticWAVE:
         self.memory_dvx_dz=ti.field(dtype=fieldtype,shape=self.gridsize) 
         self.memory_dvz_dx=ti.field(dtype=fieldtype,shape=self.gridsize)
         self.memory_dvz_dz=ti.field(dtype=fieldtype,shape=self.gridsize)
-        self.init_src(1,1.0,0.0)  # Initialize source with Ricker wavelet
+        #self.init_src(1,1.0,0.0)  # Initialize source with Ricker wavelet
 
     def Compute_mu(self,fieldtype):
         size=self.vs.shape
@@ -111,7 +112,7 @@ class ElasticWAVE:
         lam.from_numpy(lam_np)
         return lam
     @ti.kernel
-    def init_src(self,src_type:int,src_scale:float,t0:float):
+    def init_src(self,src_type:int,src_scale:float):
         dt=self.dt
         f0=self.f0
         if src_type==1:
@@ -119,7 +120,7 @@ class ElasticWAVE:
                 self.src[i]=Ricker(i,dt,f0,src_scale)
         if src_type==2:
             for i in ti.ndrange(self.nt):
-                self.src[i]=Ricker2(i,dt,t0,f0,src_scale)    
+                self.src[i]=Ricker2(i,dt,f0,src_scale)    
     
     # Freedome boundary condtion 
     @ti.kernel
@@ -180,11 +181,13 @@ class ElasticWAVE:
 
             self.vx[i,j]+=(dsxxdx+dsxzdz)*dt/rho
             self.vz[i,j]+=(dszzdz+dsxzdx)*dt/rho    
-   
-        # add source
-      
+        # add source     
         for i,j in ti.ndrange((-1,1),(-1,1)):
-            self.vz[isx+i,isz+j]+=dt*self.src[nt] / (4*self.rho[isx+i,isz+j])
+            self.sxx[isx+i,isz+j]+=self.src[nt] 
+            self.szz[isx+i,isz+j]+=self.src[nt] 
+
+
+        #self.vz[isx+i,isz+j]+=dt*self.src[nt] / (4*self.rho[isx+i,isz+j])
        # update sxx szz
        # update sxx szz
         for i,j in ti.ndrange((star,nx-star-1),(star,nz-star-1)):
@@ -233,27 +236,11 @@ class ElasticWAVE:
     
     @staticmethod
     def diff_coff_op(order:int):
-        size=int(order)
-        c=ti.field(dtype=ti.f32,shape=size)
-        if order==2:
-            c[0]=1.129042
-            c[1]=-0.0430142
-        elif order==3:
-            c[0]=2.081695391597685
-            c[1]=-0.01139368190892791
-            c[2]=-0.2095028691741802
-        elif order==4:
-            c[0]=1.231666
-            c[1]=-1.041182e-1
-            c[2]=2.063707e-2  
-            c[3]=-3.570998e-3  
-        elif order==5:
-            c[0]=1.236425
-            c[1]=-0.10811
-            c[2]=0.02339911  
-            c[3]=-0.005061550                 
-            c[4]=0.0007054313 
+        c_np,er=FD_liu(order,0.0001)
+        c=ti.field(dtype=ti.f32,shape=(order,))
+        c.from_numpy(c_np)
         return c
+
         
     def SetADEPML2D(self,pml_surface,parameter:dict):
         vp_max=parameter["vp_max"]  

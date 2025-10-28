@@ -21,7 +21,6 @@ class ElasticWAVE:
                  rsy:ti.field,
                  rsz:ti.field,
                  MT:ti.field, 
-                 src_scale:float,
                  nt:int,               
                  accuracy:int,
                  freq=100.,
@@ -54,7 +53,6 @@ class ElasticWAVE:
         self.rsy=rsy
         self.rsz=rsz
         self.MT=MT
-        self.src_scale=src_scale
         datasize=rsx.shape[1]
         self.datasize=datasize
         self.data=ti.field(dtype=ti.f32,shape=(nt,datasize))
@@ -161,10 +159,8 @@ class ElasticWAVE:
         order=self.star
         for i,j in ti.ndrange(self.gridsize[0],self.gridsize[1]):
             self.szz[i,j,order]=0
-
-
     @ti.kernel
-    def update_SSG(self,nt:int):
+    def update_SSG(self,nt:int,source:ti.f32):
         star=self.star
         dx=self.dx
         dy=self.dy
@@ -182,15 +178,13 @@ class ElasticWAVE:
         nx=self.gridsize[0]
         ny=self.gridsize[1]
         nz=self.gridsize[2]
-        src_scale=self.src_scale
-        source=Ricker2(nt,dt,0.03,self.f0,src_scale)
         self.sxx[isx,isy,isz]+=source*(-self.MT[0,0]) 
-        self.syy[isx,isy,isz]+=source*(-self.MT[1,1]) 
+        self.syy[isx,isy,isz]+=source*(-self.MT[1,1])  
         self.szz[isx,isy,isz]+=source*(-self.MT[2,2]) 
 
-        self.sxy[isx,isy,isz]+=source*(-self.MT[0,1]) 
-        self.sxz[isx,isy,isz]+=source*(-self.MT[0,2]) 
-        self.syz[isx,isy,isz]+=source*(-self.MT[1,2]) 
+        self.sxy[isx,isy,isz]+=source*(-self.MT[0,1])  
+        self.sxz[isx,isy,isz]+=source*(-self.MT[0,2])  
+        self.syz[isx,isy,isz]+=source*(-self.MT[1,2])  
         # update vx
         for i,j,k in ti.ndrange((star,nx-star-1),(star+1,ny-star),(star+1,nz-star)):
             x=(i-star)*dx+dx/2
@@ -309,40 +303,9 @@ class ElasticWAVE:
                 dvydz =dvydz /self.k_z_half[k] + self.memory_dvy_dz[i,j,k] 
             self.syz[i,j,k]+=mu_half_y_half_z*(dvzdy+dvydz)*dt
     
-    # implement Dirichlet boundary conditions on the six edges of the grid
-        '''
-        for i,j,k in ti.ndrange(star,ny,nz):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0
-        # xmax
-        for i,j,k in ti.ndrange((nx-star,nx),nx,nz):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0
-        # ymin
-        for i,j,k in ti.ndrange(nx,star,nz):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0 
-            self.vz[i,j,k]=0
-        # ymax
-        for i,j,k in ti.ndrange(nx,(ny-star,ny),ny):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0  
-        # zmin
-        for i,j,k in ti.ndrange(nx,ny,star):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0
-        # zmax
-        for i,j,k in ti.ndrange(nx,ny,(nz-star,nz)):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0  
-            self.vz[i,j,k]=0  
-        '''
         for i in range(self.datasize):
             self.data[nt,i]=self.vx[self.rsx[0,i],self.rsy[0,i],self.rsz[0,i]]
+            print(self.data[nt,i])
 
     
     @staticmethod

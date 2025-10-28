@@ -1,6 +1,7 @@
 import taichi as ti
 import numpy as np
 from src.Differential3D_RSG import Drd1bm,Drd2bm,Drd3bm,Drd4bm,Drd1fm,Drd2fm,Drd3fm,Drd4fm
+from src.FD_Liu import FD_liu
 pi=np.pi
 
 @ti.data_oriented
@@ -39,10 +40,9 @@ class ElasticWAVE:
         self.xmax=dx*(self.gridsize[1]-1-2*accuracy)-self.xmin    # Calculate the maximum x-coordinate based on grid size and spacing
         self.ymax=dy*(self.gridsize[2]-1-2*accuracy)-self.ymin    # Calculate the maximum z-coordinate based on grid size and spacing
         self.zmax=dz*(self.gridsize[0]-1-2*accuracy)-self.zmin    # Calculate the maximum z-coordinate based on grid size and spacing
-        self.xmin_EAL=5*dx
-        self.ymin_EAL=5*dy
-        self.zmin_EAL=5*dz
-        self.pml_layer_num=25  # The number of grid points in PML layer
+        self.xmin_EAL=10*dx
+        self.ymin_EAL=10*dy
+        self.zmin_EAL=10*dz
         self.star=accuracy
         self.xmax_EAL=dx*(self.gridsize[1]-1-2*accuracy)-self.xmin_EAL    # Calculate the maximum x-coordinate based on grid size and spacing
         self.ymax_EAL=dy*(self.gridsize[2]-1-2*accuracy)-self.ymin_EAL    # Calculate the maximum z-coordinate based on grid size and spacing
@@ -164,9 +164,9 @@ class ElasticWAVE:
         ymax_pml = self.ymax_pml
         zmin_pml = self.zmin_pml
         zmax_pml = self.zmax_pml
-        nx=self.gridsize[0]
-        ny=self.gridsize[1]
-        nz=self.gridsize[2]
+        nx=self.gridsize[1]
+        ny=self.gridsize[2]
+        nz=self.gridsize[0]
         # update vx vy vz
         for k,i,j in ti.ndrange((star+1,nz-star),(star,nx-star-1),(star+1,ny-star)):
             x=(i-star)*dx
@@ -258,40 +258,7 @@ class ElasticWAVE:
                 self.vx[k,i,j]+=(dsxxdx+dsxydy+dsxzdz)*dt/ rho
                 self.vy[k,i,j]+=(dsxydx+dsyydy+dsyzdz)*dt/ rho 
                 self.vz[k,i,j]+=(dsxzdx+dsyzdy+dszzdz)*dt/ rho      
-    # implement Dirichlet boundary conditions on the six edges of the grid
-        # xmin
-        '''
-        for i,j,k in ti.ndrange(star,ny,nz):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0
-        # xmax
-        for i,j,k in ti.ndrange((nx-star,nx),nx,nz):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0
-        # ymin
-        for i,j,k in ti.ndrange(nx,star,nz):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0 
-            self.vz[i,j,k]=0
-        # ymax
-        for i,j,k in ti.ndrange(nx,(ny-star,ny),ny):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0  
-        # zmin
-        for i,j,k in ti.ndrange(nx,ny,star):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0
-        # zmax
-        for i,j,k in ti.ndrange(nx,ny,(nz-star,nz)):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0  
-            self.vz[i,j,k]=0  '
-        '''
-        
+       
     # source term  
         for k,i,j in ti.ndrange((0,2),(0,2),(0,2)):
             self.vz[isz+k,isx+i,isy+j]+=dt*source/self.rho[isz+k,isx+i,isy+j]/8
@@ -388,23 +355,7 @@ class ElasticWAVE:
                 self.syz[k,i,j]+= mu*(dvydz+dvzdy)*dt 
         self.data[nt]=self.vx[self.rsz,self.rsx,self.rsy]
 
-        '''
-        for k,i,j in ti.ndrange((self.star+self.pml_layer_num,nz-self.star-self.pml_layer_num),(self.star+self.pml_layer_num,nx-self.star-self.pml_layer_num),(self.star+self.pml_layer_num,ny-self.star-self.pml_layer_num)):
-            E=self.mu[k,i,j]*(3*self.lam[k,i,j]+2*self.mu[k,i,j])/(self.lam[k,i,j]+self.mu[k,i,j])  # Young's modulus
-            G=self.mu[k,i,j]
-            nu=self.lam[k,i,j]/(2*(self.lam[k,i,j]+self.mu[k,i,j]))  # shear modulus
-
-            xi_xx=1/E*(self.sxx[k,i,j]-nu*(self.syy[k,i,j]+self.szz[k,i,j]))
-            xi_yy=1/E*(self.syy[k,i,j]-nu*(self.sxx[k,i,j]+self.szz[k,i,j]))
-            xi_zz=1/E*(self.szz[k,i,j]-nu*(self.sxx[k,i,j]+self.syy[k,i,j]))
-            xi_xz=1/(G)*(self.sxz[k,i,j])
-            xi_yz=1/(G)*(self.syz[k,i,j])
-            xi_xy=1/(G)*(self.sxy[k,i,j])
-            self.data[nt]+=self.rho[k,i,j]*(self.vx[k,i,j]**2+self.vy[k,i,j]**2+self.vz[k,i,j]**2)/2
-            #self.data[nt]+=(self.sxx[k,i,j]*xi_xx+self.szz[k,i,j]*xi_zz+self.syy[k,i,j]*xi_yy
-                            #+self.sxz[k,i,j]*xi_xz+self.syz[k,i,j]*xi_yz+self.sxy[k,i,j]*xi_xy)/2
-        '''         
-
+ 
     @staticmethod
     def diff_coff(order:int):
         b=np.zeros((order))
@@ -419,14 +370,9 @@ class ElasticWAVE:
         return c
     @staticmethod
     def diff_op(order:int):
-        if order==5:
-            c=ti.field(dtype=ti.f32,shape=(order,))
-            c[0]=1.2429701
-            c[1]=-1.134665e-1
-            c[2]=2.685699e-2
-            c[3]=-6.762350e-3
-            c[4]=1.164592e-3
-
+        c_np,er=FD_liu(order,0.0001)
+        c=ti.field(dtype=ti.f32,shape=(order,))
+        c.from_numpy(c_np)
         return c
     
     def SetADEPML3D(self,pml_surface,parameter:dict):
@@ -435,9 +381,9 @@ class ElasticWAVE:
         dy=self.dy
         dz=self.dz
         dt=self.dt
-        nx=self.gridsize[0]
-        ny=self.gridsize[1]
-        nz=self.gridsize[2]
+        nx=self.gridsize[1]
+        ny=self.gridsize[2]
+        nz=self.gridsize[0]
         xmin=self.xmin
         ymin=self.ymin
         xmax=self.xmax

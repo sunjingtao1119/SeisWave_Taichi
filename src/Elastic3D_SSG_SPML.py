@@ -22,7 +22,6 @@ class ElasticWAVE:
                  nt:int,               
                  accuracy:int,
                  freq=100.,
-                 src_scale=1.,
                  fieldtype=ti.f32
                 ):
         # Initialize model parameters
@@ -53,8 +52,7 @@ class ElasticWAVE:
         self.rsx=rsx
         self.rsy=rsy
         self.rsz=rsz
-        self.src_scale=src_scale
-        self.data=ti.field(dtype=ti.f32,shape=nt)
+        self.data=ti.field(dtype=ti.fieldtype,shape=nt)
         # velocity field and stress field initial 
         self.vx =ti.field(dtype=fieldtype,shape=self.gridsize)
         self.vy =ti.field(dtype=fieldtype,shape=self.gridsize)
@@ -158,7 +156,7 @@ class ElasticWAVE:
 
 
     @ti.kernel
-    def update_SSG_SPML(self,nt:int):
+    def update_SSG(self,nt:int,source:ti.f32):
         star=self.star
         dx=self.dx
         dy=self.dy
@@ -167,7 +165,7 @@ class ElasticWAVE:
         isz=self.isz
         isy=self.isy
         isx=self.isx
-        src_scale=self.src_scale
+
         # Boundary position of PML
         xmin_pml = self.xmin_pml
         xmax_pml = self.xmax_pml
@@ -202,9 +200,7 @@ class ElasticWAVE:
                 self.vx_z[i,j,k]=(pmlzn*self.vx_z[i,j,k]+dsxzdz*dt*rho_over)/pmlzd
                 self.vx[i,j,k]=self.vx_x[i,j,k]+self.vx_y[i,j,k]+self.vx_z[i,j,k]
             else:
-                self.vx[i,j,k] +=(dsxxdx+dsxydy+dsxzdz)*dt*rho_over     
-            
-            #self.vx[i,j,k]+=(dsxxdx+dsxydy+dsxzdz)*dt*rho_over   
+                self.vx[i,j,k] +=(dsxxdx+dsxydy+dsxzdz)*dt*rho_over      
         # update vy
         for i, j, k in ti.ndrange((star+1, nx - star ), (star , ny - star-1), (star+1, nz - star )):
             x = (i-star)*dx
@@ -291,7 +287,7 @@ class ElasticWAVE:
             self.vz[i,j,k]=0  '
         '''
        # source term  
-        self.vz[isx,isy,isz]+=dt*Ricker(nt,dt,self.f0,src_scale)/self.rho[isx,isy,isz] 
+        self.vx[isx,isy,isz]+=dt*source/self.rho[isx,isy,isz] 
        # update sxx szz,syy
         for i,j,k in ti.ndrange((star+1,nx-star),(star+1,ny-star),(star+1,nz-star)):
             x=(i-star)*dx
@@ -359,7 +355,7 @@ class ElasticWAVE:
             if (x<=xmin_pml or x>=xmax_pml or y<=ymin_pml or y>=ymax_pml or z<=zmin_pml or z>=zmax_pml ):
                 pmlxn=(1-0.5*dt*self.pml_x_half[i])
                 pmlzn=(1-0.5*dt*self.pml_z_half[k])
-
+                
                 pmlxd=(1+0.5*dt*self.pml_x_half[i])
                 pmlzd=(1+0.5*dt*self.pml_z_half[k])
 
@@ -390,7 +386,7 @@ class ElasticWAVE:
             else:
                 self.syz[i,j,k]+=mu_half_y_half_z*(dvydz+dvzdy)*dt 
         
-        self.data[nt]=self.vx[self.rsx,self.rsy,self.rsz]
+        self.data[nt]=self.vz[self.rsx,self.rsy,self.rsz]
     
     @staticmethod
     def diff_coff(order:int):

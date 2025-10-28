@@ -11,11 +11,19 @@ def Ricker(nt:int,dt:float,freq:float,src_scale:float)->ti.f32:
     return src
 
 @ti.func
-def Ricker2(nt:int,dt:float,t0:float,freq:float,src_scale:float)->ti.f32:
+def Ricker2(nt:int,dt:float,freq:float,src_scale:float)->ti.f32:
+    a=pi**2*freq**2
+    t=nt*dt
+    t0=1/freq
+    tau = t-t0
+    src= src_scale*(1 -2* a*tau**2 )*ti.exp(-a*tau**2  )
+    return src
+@ti.func
+def DRicker2(nt:int,dt:float,t0:float,freq:float,   src_scale:float)->ti.f32:
     a=pi**2*freq**2
     t=nt*dt
     tau = t-t0
-    src= src_scale*(1 -2* a*tau**2 )*ti.exp(-a*tau**2  )
+    src= src_scale*2*a*tau*(4*a*tau**2-3)*ti.exp(-a*tau**2  )
     return src
 
 @ti.func

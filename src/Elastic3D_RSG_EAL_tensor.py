@@ -1,7 +1,7 @@
 import taichi as ti
 import numpy as np
 from src.Differential3D_RSG import Drd1bm,Drd2bm,Drd3bm,Drd4bm,Drd1fm,Drd2fm,Drd3fm,Drd4fm
-from src.BaseFun import Ricker2
+# from src.BaseFun import Ricker2
 pi=np.pi
 
 @ti.data_oriented
@@ -20,8 +20,7 @@ class ElasticWAVE:
                  rsx:int,
                  rsy:int,
                  rsz:int,
-            MT:ti.field, 
-                 src_scale:float, 
+                 MT:ti.field,  
                  nt:int,               
                  accuracy:int,
                  freq=100,
@@ -42,9 +41,9 @@ class ElasticWAVE:
         self.xmax=dx*(self.gridsize[1]-1-2*accuracy)-self.xmin    # Calculate the maximum x-coordinate based on grid size and spacing
         self.ymax=dy*(self.gridsize[2]-1-2*accuracy)-self.ymin    # Calculate the maximum z-coordinate based on grid size and spacing
         self.zmax=dz*(self.gridsize[0]-1-2*accuracy)-self.zmin    # Calculate the maximum z-coordinate based on grid size and spacing
-        self.xmin_EAL=5*dx
-        self.ymin_EAL=5*dy
-        self.zmin_EAL=5*dz
+        self.xmin_EAL=10*dx
+        self.ymin_EAL=10*dy
+        self.zmin_EAL=10*dz
         self.star=accuracy
         self.c=self.diff_coff(accuracy)
         self.xmax_EAL=dx*(self.gridsize[1]-1-2*accuracy)-self.xmin_EAL    # Calculate the maximum x-coordinate based on grid size and spacing
@@ -64,7 +63,7 @@ class ElasticWAVE:
         self.rsy=rsy
         self.rsz=rsz
         self.MT=MT
-        self.src_scale=src_scale
+        
         datasize=rsx.shape[1]
         self.datasize=datasize
         self.data=ti.field(dtype=ti.f32,shape=(nt,datasize))
@@ -94,11 +93,11 @@ class ElasticWAVE:
         self.pml_y_half  =ti.field(fieldtype,shape=self.gridsize[2])   # half grid
         self.alpha_y     =ti.field(fieldtype,shape=self.gridsize[2])
         self.alpha_y_half=ti.field(fieldtype,shape=self.gridsize[2])   # half grid
-        self.k_y        =ti.field(fieldtype,shape=self.gridsize[2])
+        self.k_y         =ti.field(fieldtype,shape=self.gridsize[2])
         self.k_y_half    =ti.field(fieldtype,shape=self.gridsize[2])   # half grid
         self.b_y         =ti.field(fieldtype,shape=self.gridsize[2])
         self.b_y_half    =ti.field(fieldtype,shape=self.gridsize[2])   # half grid
-        self.a_y         =ti.field(fieldtype,shape=self.gridsize[2])
+        self.a_y         =ti.field(fieldtype,shape=self.gridsize[2]) 
         self.a_y_half    =ti.field(fieldtype,shape=self.gridsize[2])   # half grid
 
 
@@ -157,7 +156,7 @@ class ElasticWAVE:
         return lam
 
     @ti.kernel
-    def update_RSG(self,nt:int):
+    def update_RSG(self,nt:int,source:ti.f32):
         star=self.star
         dx =self.dx
         dy =self.dy
@@ -172,15 +171,14 @@ class ElasticWAVE:
         ymax_pml = self.ymax_pml
         zmin_pml = self.zmin_pml
         zmax_pml = self.zmax_pml
-        nx=self.gridsize[0]
-        ny=self.gridsize[1]
-        nz=self.gridsize[2]
-            # source term  
-        source=Ricker2(nt,dt,0.03,self.f0,1000)
-        for i,j,k in ti.ndrange((0,2),(0,2),(0,2)):
-            self.sxx[isz+k,isx+i,isy+j,]+=source*(-self.MT[0,0])/8 
-            self.syy[isz+k,isx+i,isy+j,]+=source*(-self.MT[1,1])/8 
-            self.szz[isz+k,isx+i,isy+j,]+=source*(-self.MT[2,2])/8 
+        nx=self.gridsize[1]
+        ny=self.gridsize[2]
+        nz=self.gridsize[0]
+ 
+        for k,i,j in ti.ndrange((0,2),(0,2),(0,2)):
+            self.sxx[isz+k,isx+i,isy+j]+=source*(-self.MT[0,0])/8
+            self.syy[isz+k,isx+i,isy+j]+=source*(-self.MT[1,1])/8
+            self.szz[isz+k,isx+i,isy+j]+=source*(-self.MT[2,2])/8
 
             self.sxy[isz+k,isx+i,isy+j]+=source*(-self.MT[0,1])/8 
             self.sxz[isz+k,isx+i,isy+j]+=source*(-self.MT[0,2])/8 
@@ -277,40 +275,6 @@ class ElasticWAVE:
                 self.vy[k,i,j]+=(dsxydx+dsyydy+dsyzdz)*dt/ rho 
                 self.vz[k,i,j]+=(dsxzdx+dsyzdy+dszzdz)*dt/ rho      
     # implement Dirichlet boundary conditions on the six edges of the grid
-        # xmin
-        '''
-        for i,j,k in ti.ndrange(star,ny,nz):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0
-        # xmax
-        for i,j,k in ti.ndrange((nx-star,nx),nx,nz):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0
-        # ymin
-        for i,j,k in ti.ndrange(nx,star,nz):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0 
-            self.vz[i,j,k]=0
-        # ymax
-        for i,j,k in ti.ndrange(nx,(ny-star,ny),ny):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0  
-        # zmin
-        for i,j,k in ti.ndrange(nx,ny,star):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0
-            self.vz[i,j,k]=0
-        # zmax
-        for i,j,k in ti.ndrange(nx,ny,(nz-star,nz)):
-            self.vx[i,j,k]=0
-            self.vy[i,j,k]=0  
-            self.vz[i,j,k]=0  '
-        '''
-        
-
 
        # update sxx szz,syy
         for k,i,j in ti.ndrange((star+1,nz-star),(star+1,nx-star),(star+1,ny-star)):
@@ -402,11 +366,13 @@ class ElasticWAVE:
                 self.sxy[k,i,j]+= mu*(dvxdy+dvydx)*dt 
                 self.sxz[k,i,j]+= mu*(dvxdz+dvzdx)*dt 
                 self.syz[k,i,j]+= mu*(dvydz+dvzdy)*dt
+        
         for i in range(self.datasize):
-            self.data[nt,i]=self.vx[self.rsz[0,i],self.rsx[0,i],self.rsy[0,i]] 
+            self.data[nt,i]=self.vx[self.rsx[0,i],self.rsy[0,i],self.rsz[0,i]]
+
 
         
-   
+    
 
     @staticmethod
     def diff_coff(order:int):
@@ -427,9 +393,9 @@ class ElasticWAVE:
         dy=self.dy
         dz=self.dz
         dt=self.dt
-        nx=self.gridsize[0]
-        ny=self.gridsize[1]
-        nz=self.gridsize[2]
+        nx=self.gridsize[1]
+        ny=self.gridsize[2]
+        nz=self.gridsize[0]
         xmin=self.xmin
         ymin=self.ymin
         xmax=self.xmax
