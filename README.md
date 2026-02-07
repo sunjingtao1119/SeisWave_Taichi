@@ -32,4 +32,4 @@ Taichi and Python share a similar syntax, but they are not identical.https://doc
 
 
 Taichi-driven seismic wave modeling: A CUDA-free implicit parallel finite-difference time-domain framework with GPU acceleration  https://doi.org/10.1016/j.cageo.2026.106120
-Get rights and content
+
